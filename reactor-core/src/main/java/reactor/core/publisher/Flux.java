@@ -8153,7 +8153,13 @@ public abstract class Flux<T> implements CorePublisher<T> {
 		if (publisher instanceof OptimizableOperator) {
 			OptimizableOperator operator = (OptimizableOperator) publisher;
 			while (true) {
-				subscriber = operator.subscribeOrReturn(subscriber);
+				try {
+					subscriber = operator.subscribeOrReturn(subscriber);
+				}
+				catch (Throwable e) {
+					Operators.error(subscriber, Operators.onOperatorError(e,  subscriber.currentContext()));
+					return;
+				}
 				if (subscriber == null) {
 					// null means "I will subscribe myself", returning...
 					return;
