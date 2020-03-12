@@ -49,7 +49,7 @@ abstract class InternalMonoOperator<I, O> extends MonoOperator<I, O> implements 
 				subscriber = operator.subscribeOrReturn(subscriber);
 			}
 			catch (Throwable e) {
-				Operators.error(subscriber, Operators.onOperatorError(e,  subscriber.currentContext()));
+				Operators.error(subscriber, Operators.onOperatorError(e, subscriber.currentContext()));
 				return;
 			}
 			if (subscriber == null) {
@@ -66,7 +66,7 @@ abstract class InternalMonoOperator<I, O> extends MonoOperator<I, O> implements 
 	}
 
 	@Nullable
-	public abstract CoreSubscriber<? super I> subscribeOrReturn(CoreSubscriber<? super O> actual);
+	public abstract CoreSubscriber<? super I> subscribeOrReturn(CoreSubscriber<? super O> actual) throws Throwable;
 
 	@Override
 	public final CorePublisher<? extends I> source() {
