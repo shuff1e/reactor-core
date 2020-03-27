@@ -16,12 +16,8 @@
 
 package reactor.core.publisher;
 
-import java.lang.ref.PhantomReference;
-import java.lang.ref.ReferenceQueue;
-import java.lang.ref.WeakReference;
 import java.time.Duration;
 import java.util.Arrays;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -34,6 +30,7 @@ import org.junit.Assert;
 import org.junit.Test;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscription;
+
 import reactor.core.CoreSubscriber;
 import reactor.core.Scannable;
 import reactor.test.MemoryUtils;
@@ -67,6 +64,7 @@ public class FluxWindowWhenTest {
 	}
 
 
+	//see https://github.com/reactor/reactor-core/issues/975
 	@Test
 	public void noWindowRetained_gh975() throws InterruptedException {
 		LongAdder created = new LongAdder();
@@ -89,14 +87,15 @@ public class FluxWindowWhenTest {
 		final CountDownLatch latch = new CountDownLatch(1);
 		final UnicastProcessor<Wrapper> processor = UnicastProcessor.create();
 
-		Flux<Integer> emitter = Flux.range(1, 400)
-		                            .delayElements(Duration.ofMillis(10))
+		Flux<Integer> emitter = Flux.range(1, 200)
+		                            .delayElements(Duration.ofMillis(25))
 		                            .doOnNext(i -> processor.onNext(finalizedTracker.tracked(new Wrapper(i))))
 		                            .doOnComplete(processor::onComplete);
 
 		AtomicReference<FluxWindowWhen.WindowWhenMainSubscriber> startEndMain = new AtomicReference<>();
 		AtomicReference<List> windows = new AtomicReference<>();
 
+		LOGGER.info("stat[index, windows in flight, finalized] windowStart windowEnd:");
 		Mono<List<Tuple3<Long, Integer, Long>>> buffers =
 				processor.window(Duration.ofMillis(1000), Duration.ofMillis(500))
 				         .doOnSubscribe(s -> {
@@ -105,18 +104,24 @@ public class FluxWindowWhenTest {
 					         startEndMain.set(sem);
 					         windows.set(sem.windows);
 				         })
-				         .flatMap(f -> f.take(2))
+				         .flatMap(Flux::collectList)
 				         .index()
 				         .doOnNext(it -> System.gc())
 				         //index, number of windows "in flight", finalized
-				         .map(t2 -> Tuples.of(t2.getT1(), windows.get().size(), finalizedTracker.finalizedCount()))
-				         .doOnNext(v -> LOGGER.info(v.toString()))
+				         .map(t2 -> {
+				         	Tuple3<Long, Integer, Long> stat = Tuples.of(t2.getT1(), windows.get().size(), finalizedTracker.finalizedCount());
+				         	//log the window boundaries without retaining them in the tuple
+				         	LOGGER.info("{}\t{}\t{}", stat, t2.getT2().get(0),
+						            t2.getT2().get(t2.getT2().size() - 1));
+				         	return stat;
+				         })
 				         .doOnComplete(latch::countDown)
 				         .collectList();
 
 		emitter.subscribe();
 
 		List<Tuple3<Long, Integer, Long>> finalizeStats = buffers.block();
+		LOGGER.info("Tracked {} elements, collected {} windows", finalizedTracker.trackedTotal(), finalizeStats.size());
 
 		//at least 5 intermediate finalize
 		Condition<? super Tuple3<Long, Integer, Long>> hasFinalized = new Condition<>(
@@ -132,8 +137,6 @@ public class FluxWindowWhenTest {
 		assertThat(windows.get().size())
 				.as("no window retained")
 				.isZero();
-
-		System.out.println(finalizedTracker.trackedTotal());
 
 		assertThat(finalizedTracker.finalizedCount())
 				.as("final GC collects all")

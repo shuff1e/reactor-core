@@ -131,7 +131,7 @@ public class FluxBufferWhenTest {
 						         String.format("from %s to %s", t2.getT2().get(0),
 								         t2.getT2().get(t2.getT2().size() - 1)),
 						         retainedDetector.finalizedCount()))
-				         .doOnNext(v -> LOGGER.debug(v.toString()))
+				         .doOnNext(v -> LOGGER.info(v.toString()))
 				         .doOnComplete(latch::countDown)
 				         .collectList();
 
